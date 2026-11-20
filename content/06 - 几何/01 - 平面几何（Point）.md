@@ -1,0 +1,249 @@
+# 平面几何（Point）
+
+坐标有限；`Point<i64>` 的坐标绝对值<=1e9 时单次点积/叉积不溢出，面积累加还须保证 i64 可表示。 浮点相等和相交为严格比较，需按题目自行加 eps；距离为 double，整数除法及交点坐标会截断。
+
+`Point<T>` 的 x、y 为坐标或向量分量；`Line<T>` 的 a、b 为 a→b 两端点，坐标类型写 `Line<i64>`。 直线交点须不平行；点线/点段距离及两段距离须端点不同。无跨坐标类型转换构造，转换需逐分量。 线段相交 kind=0 时交点字段无效；1/3 时两个字段相同，2 时为重叠段两端；多边形按边界顺序，不重复首点。
+
+点积/叉积/距离/线段判定 O(1)；pointInPolygon/polygonArea2 O(n)。
+
+```cpp
+#ifndef XCPC_TEMPLATE_POINT
+#define XCPC_TEMPLATE_POINT
+
+template <class T> struct Point {
+    T x;
+    T y;
+
+    // 构造点/向量，省略坐标得到原点。
+    Point(const T &x_ = 0, const T &y_ = 0) : x(x_), y(y_) {}
+
+    // 原地向量运算；标量除数须非零，返回本对象引用。
+    Point &operator+=(const Point &p) & {
+        x += p.x;
+        y += p.y;
+        return *this;
+    }
+    // 原地向量运算；标量除数须非零，返回本对象引用。
+    Point &operator-=(const Point &p) & {
+        x -= p.x;
+        y -= p.y;
+        return *this;
+    }
+    // 原地向量运算；标量除数须非零，返回本对象引用。
+    Point &operator*=(const T &v) & {
+        x *= v;
+        y *= v;
+        return *this;
+    }
+    // 原地向量运算；标量除数须非零，返回本对象引用。
+    Point &operator/=(const T &v) & {
+        x /= v;
+        y /= v;
+        return *this;
+    }
+    // 返回反向向量。
+    Point operator-() const {
+        return Point(-x, -y);
+    }
+    // 返回两向量之和。
+    friend Point operator+(Point a, const Point &b) {
+        return a += b;
+    }
+    // 返回两向量之差。
+    friend Point operator-(Point a, const Point &b) {
+        return a -= b;
+    }
+    // 返回标量倍向量。
+    friend Point operator*(Point a, const T &b) {
+        return a *= b;
+    }
+    // 返回向量除以非零标量。
+    friend Point operator/(Point a, const T &b) {
+        return a /= b;
+    }
+    // 返回标量左乘向量。
+    friend Point operator*(const T &a, Point b) {
+        return b *= a;
+    }
+    // 返回坐标严格相等，不含 eps。
+    friend bool operator==(const Point &a, const Point &b) {
+        return a.x == b.x && a.y == b.y;
+    }
+    // 返回字典序比较（先 x 后 y），不含 eps。
+    friend bool operator<(const Point &a, const Point &b) {
+        return a.x < b.x || (a.x == b.x && a.y < b.y);
+    }
+    // 读入 x、y，返回输入流。
+    friend std::istream &operator>>(std::istream &is, Point &p) {
+        return is >> p.x >> p.y;
+    }
+    // 输出 x、y，返回输出流。
+    friend std::ostream &operator<<(std::ostream &os, const Point &p) {
+        return os << p.x << " " << p.y;
+    }
+};
+
+template <class T> struct Line {
+    Point<T> a;
+    Point<T> b;
+
+    // 构造有向线段端点；直线运算须保证两端点不同。
+    Line(const Point<T> &a_ = Point<T>(), const Point<T> &b_ = Point<T>()) : a(a_), b(b_) {}
+};
+
+template <class T>
+// 返回两向量点积。
+T dot(const Point<T> &a, const Point<T> &b) {
+    return a.x * b.x + a.y * b.y;
+}
+
+template <class T>
+// 返回两向量二维叉积（a 到 b 逆时针为正）。
+T cross(const Point<T> &a, const Point<T> &b) {
+    return a.x * b.y - a.y * b.x;
+}
+
+template <class T>
+// 返回向量长度平方。
+T square(const Point<T> &p) {
+    return dot(p, p);
+}
+
+template <class T>
+// 返回向量长度，结果为 double。
+double length(const Point<T> &p) {
+    return std::sqrt(square(p));
+}
+
+template <class T>
+// 返回两点距离，结果为 double。
+double distance(const Point<T> &a, const Point<T> &b) {
+    return length(a - b);
+}
+
+template <class T>
+// 返回点到直线距离；两端点须不同。
+double distancePL(const Point<T> &p, const Line<T> &l) {
+    return std::abs(cross(l.a - l.b, l.a - p)) / length(l.b - l.a);
+}
+
+template <class T>
+// 返回点到闭线段距离；端点须不同，零长段会除零。
+double distancePS(const Point<T> &p, const Line<T> &l) {
+    if (dot(p - l.a, l.b - l.a) < 0) {
+        return distance(p, l.a);
+    }
+    if (dot(p - l.b, l.a - l.b) < 0) {
+        return distance(p, l.b);
+    }
+    return distancePL(p, l);
+}
+
+template <class T>
+// 返回两非平行直线交点；整数类型用 long double 计算后截断，精度场景改用浮点坐标。
+Point<T> lineIntersection(const Line<T> &l1, const Line<T> &l2) {
+    long double c1 = (long double)cross(l2.b - l2.a, l1.a - l2.a);
+    long double c2 = (long double)cross(l2.b - l2.a, l1.a - l1.b);
+    long double t = c1 / c2;
+    return Point<T>(l1.a.x + (long double)(l1.b.x - l1.a.x) * t,
+                    l1.a.y + (long double)(l1.b.y - l1.a.y) * t);
+}
+
+template <class T>
+// 判断点是否在闭线段上（含端点；浮点需自行加 eps）。
+bool pointOnSegment(const Point<T> &p, const Line<T> &l) {
+    return cross(p - l.a, l.b - l.a) == 0 && std::min(l.a.x, l.b.x) <= p.x &&
+           p.x <= std::max(l.a.x, l.b.x) && std::min(l.a.y, l.b.y) <= p.y &&
+           p.y <= std::max(l.a.y, l.b.y);
+}
+
+template <class T>
+// 判断点是否在简单多边形闭区域内（边界算内，与绕向无关，O(n)）。
+bool pointInPolygon(const Point<T> &a, const std::vector<Point<T>> &p) {
+    int n = p.size();
+    for (int i = 0; i < n; i++) {
+        if (pointOnSegment(a, Line(p[i], p[(i + 1) % n]))) {
+            return true;
+        }
+    }
+    int t = 0;
+    for (int i = 0; i < n; i++) {
+        auto u = p[i];
+        auto v = p[(i + 1) % n];
+        if (u.x < a.x && v.x >= a.x && cross(v - u, a - u) > 0) {
+            t ^= 1;
+        }
+        if (u.x >= a.x && v.x < a.x && cross(u - v, a - v) > 0) {
+            t ^= 1;
+        }
+    }
+    return t == 1;
+}
+
+template <class T>
+// 返回两闭线段相交分类：0 不相交、1 严格相交、2 重叠（返回两端点）、3 端点相交。
+std::tuple<int, Point<T>, Point<T>> segmentIntersection(const Line<T> &l1, const Line<T> &l2) {
+    if (l1.a == l1.b)
+        return {pointOnSegment(l1.a, l2) ? 3 : 0, l1.a, l1.a};
+    if (l2.a == l2.b)
+        return {pointOnSegment(l2.a, l1) ? 3 : 0, l2.a, l2.a};
+    if (std::max(l1.a.x, l1.b.x) < std::min(l2.a.x, l2.b.x) ||
+        std::min(l1.a.x, l1.b.x) > std::max(l2.a.x, l2.b.x) ||
+        std::max(l1.a.y, l1.b.y) < std::min(l2.a.y, l2.b.y) ||
+        std::min(l1.a.y, l1.b.y) > std::max(l2.a.y, l2.b.y)) {
+        return {0, Point<T>(), Point<T>()};
+    }
+    if (cross(l1.b - l1.a, l2.b - l2.a) == 0) {
+        if (cross(l1.b - l1.a, l2.a - l1.a) != 0) {
+            return {0, Point<T>(), Point<T>()};
+        }
+        Point<T> p1(std::max(std::min(l1.a.x, l1.b.x), std::min(l2.a.x, l2.b.x)),
+                    std::max(std::min(l1.a.y, l1.b.y), std::min(l2.a.y, l2.b.y)));
+        Point<T> p2(std::min(std::max(l1.a.x, l1.b.x), std::max(l2.a.x, l2.b.x)),
+                    std::min(std::max(l1.a.y, l1.b.y), std::max(l2.a.y, l2.b.y)));
+        if (!pointOnSegment(p1, l1)) {
+            std::swap(p1.y, p2.y);
+        }
+        if (p1 == p2) {
+            return {3, p1, p2};
+        }
+        return {2, p1, p2};
+    }
+    auto cp1 = cross(l2.a - l1.a, l2.b - l1.a);
+    auto cp2 = cross(l2.a - l1.b, l2.b - l1.b);
+    auto cp3 = cross(l1.a - l2.a, l1.b - l2.a);
+    auto cp4 = cross(l1.a - l2.b, l1.b - l2.b);
+    if ((cp1 > 0 && cp2 > 0) || (cp1 < 0 && cp2 < 0) || (cp3 > 0 && cp4 > 0) ||
+        (cp3 < 0 && cp4 < 0)) {
+        return {0, Point<T>(), Point<T>()};
+    }
+    Point p = lineIntersection(l1, l2);
+    if (cp1 != 0 && cp2 != 0 && cp3 != 0 && cp4 != 0) {
+        return {1, p, p};
+    }
+    return {3, p, p};
+}
+
+template <class T>
+// 返回两闭线段最短距离，相交或重叠为 0。
+double distanceSS(const Line<T> &l1, const Line<T> &l2) {
+    if (std::get<0>(segmentIntersection(l1, l2)) != 0) {
+        return 0.0;
+    }
+    return std::min(
+        {distancePS(l1.a, l2), distancePS(l1.b, l2), distancePS(l2.a, l1), distancePS(l2.b, l1)});
+}
+
+template <class T>
+// 返回简单多边形两倍无向面积，顶点须按边界顺序；空集或单点返回 0。
+T polygonArea2(const std::vector<Point<T>> &p) {
+    T s = 0;
+    int n = p.size();
+    for (int i = 0; i < n; i++) {
+        s += cross(p[i], p[(i + 1) % n]);
+    }
+    return std::abs(s);
+}
+
+#endif // XCPC_TEMPLATE_POINT
+```
